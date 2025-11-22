@@ -91,7 +91,7 @@ vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
-vim.g.have_nerd_font = false
+vim.g.have_nerd_font = true
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
@@ -377,6 +377,8 @@ require('lazy').setup({
         end,
       },
       { 'nvim-telescope/telescope-ui-select.nvim' },
+      { 'nvim-telescope/telescope-project.nvim' },
+      { 'nvim-telescope/telescope-file-browser.nvim' },
 
       -- Useful for getting pretty icons, but requires a Nerd Font.
       { 'nvim-tree/nvim-web-devicons', enabled = vim.g.have_nerd_font },
@@ -401,6 +403,8 @@ require('lazy').setup({
       -- Telescope picker. This is really useful to discover what Telescope can
       -- do as well as how to actually do it!
 
+      local project_actions = require 'telescope._extensions.project.actions'
+
       -- [[ Configure Telescope ]]
       -- See `:help telescope` and `:help telescope.setup()`
       require('telescope').setup {
@@ -413,9 +417,56 @@ require('lazy').setup({
         --   },
         -- },
         -- pickers = {}
+        --
         extensions = {
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
+          },
+          ['project'] = {
+            base_dirs = {
+              '~/dev/',
+              { '~/dev/src2' },
+              { '~/dev/src3', max_depth = 4 },
+              { path = '~/dev/src4' },
+              { path = '~/dev/src5', max_depth = 2 },
+            },
+            ignore_missing_dirs = true, -- default: false
+            hidden_files = true, -- default: false
+            theme = 'dropdown',
+            order_by = 'asc',
+            search_by = 'title',
+            sync_with_nvim_tree = true, -- default false
+            -- default for on_project_selected = find project files
+            on_project_selected = function(prompt_bufnr)
+              -- Do anything you want in here. For example:
+              project_actions.change_working_directory(prompt_bufnr, false)
+            end,
+            mappings = {
+              n = {
+                ['d'] = project_actions.delete_project,
+                ['r'] = project_actions.rename_project,
+                ['c'] = project_actions.add_project,
+                ['C'] = project_actions.add_project_cwd,
+                ['f'] = project_actions.find_project_files,
+                ['b'] = project_actions.browse_project_files,
+                ['s'] = project_actions.search_in_project_files,
+                ['R'] = project_actions.recent_project_files,
+                ['w'] = project_actions.change_working_directory,
+                ['o'] = project_actions.next_cd_scope,
+              },
+              i = {
+                ['<c-d>'] = project_actions.delete_project,
+                ['<c-v>'] = project_actions.rename_project,
+                ['<c-a>'] = project_actions.add_project,
+                ['<c-A>'] = project_actions.add_project_cwd,
+                ['<c-f>'] = project_actions.find_project_files,
+                ['<c-b>'] = project_actions.browse_project_files,
+                ['<c-s>'] = project_actions.search_in_project_files,
+                ['<c-r>'] = project_actions.recent_project_files,
+                ['<c-l>'] = project_actions.change_working_directory,
+                ['<c-o>'] = project_actions.next_cd_scope,
+              },
+            },
           },
         },
       }
@@ -423,6 +474,8 @@ require('lazy').setup({
       -- Enable Telescope extensions if they are installed
       pcall(require('telescope').load_extension, 'fzf')
       pcall(require('telescope').load_extension, 'ui-select')
+      pcall(require('telescope').load_extension, 'project')
+      pcall(require('telescope').load_extension, 'file-browser')
 
       -- See `:help telescope.builtin`
       local builtin = require 'telescope.builtin'
@@ -436,6 +489,14 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
       vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[ ] Find existing buffers' })
+
+      --Project
+      vim.api.nvim_set_keymap(
+        'n',
+        '<C-p>',
+        ":lua require'telescope'.extensions.project.project{}<CR>",
+        { noremap = true, silent = true, desc = 'Projects Window' }
+      )
 
       -- Slightly advanced example of overriding default behavior and theme
       vim.keymap.set('n', '<leader>/', function()
@@ -659,7 +720,7 @@ require('lazy').setup({
       --  By default, Neovim doesn't support everything that is in the LSP specification.
       --  When you add blink.cmp, luasnip, etc. Neovim now has *more* capabilities.
       --  So, we create new capabilities with blink.cmp, and then broadcast that to the servers.
-      local capabilities = require('blink.cmp').get_lsp_capabilities()
+      -- local capabilities = require('blink.cmp').get_lsp_capabilities()
 
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
@@ -671,9 +732,33 @@ require('lazy').setup({
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
-        -- clangd = {},
-        -- gopls = {},
-        -- pyright = {},
+        clangd = {},
+        gopls = {
+          on_attach = function(client, bufnr)
+            -- Enable inlay hints for this buffer
+            vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+          end,
+          settings = {
+            ['ui.inlayhint.hints'] = {
+              assignVariableTypes = true,
+              compositeLiteralFields = true,
+              compositeLiteralTypes = true,
+              constantValues = true,
+              functionTypeParameters = true,
+              parameterNames = true,
+              rangeVariableTypes = true,
+            },
+            -- Other gopls settings like analyses
+            analyses = {
+              shadow = true,
+              unusedwrite = true,
+              unusedvariable = true,
+              staticcheck = true,
+              gofumpt = true,
+            },
+          },
+        },
+        pyright = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -725,10 +810,20 @@ require('lazy').setup({
         handlers = {
           function(server_name)
             local server = servers[server_name] or {}
-            -- This handles overriding only values explicitly passed
-            -- by the server configuration above. Useful when disabling
-            -- certain features of an LSP (for example, turning off formatting for ts_ls)
-            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+            -- CRITICAL: start with FULL default capabilities (this contains inlayHintProvider!)
+            server.capabilities = vim.tbl_deep_extend(
+              'force',
+              vim.lsp.protocol.make_client_capabilities(), -- ← this line is the key
+              require('blink.cmp').get_lsp_capabilities(), -- ← blink.cmp adds only completion stuff
+              server.capabilities or {}
+            )
+
+            -- Auto-enable inlay hints for Go only
+            if server_name == 'gopls' then
+              server.on_attach = function(client, bufnr)
+                vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+              end
+            end
             require('lspconfig')[server_name].setup(server)
           end,
         },
@@ -974,17 +1069,17 @@ require('lazy').setup({
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
   -- require 'kickstart.plugins.debug',
-  -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
-  -- require 'kickstart.plugins.autopairs',
-  -- require 'kickstart.plugins.neo-tree',
-  -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.indent_line',
+  require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.autopairs',
+  require 'kickstart.plugins.neo-tree',
+  require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
